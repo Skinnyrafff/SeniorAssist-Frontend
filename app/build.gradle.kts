@@ -16,9 +16,7 @@ if (localPropertiesFile.exists()) {
 
 android {
     namespace = "com.example.seniorassist"
-    compileSdk {
-        version = release(36)
-    }
+    compileSdk = 36
 
     defaultConfig {
         applicationId = "com.example.seniorassist"

@@ -1,20 +1,12 @@
 package com.example.seniorassist.ui.reminders
 
-import androidx.compose.foundation.layout.Arrangement
-import androidx.compose.foundation.layout.Column
-import androidx.compose.foundation.layout.PaddingValues
-import androidx.compose.foundation.layout.Row
-import androidx.compose.foundation.layout.Spacer
-import androidx.compose.foundation.layout.fillMaxSize
-import androidx.compose.foundation.layout.fillMaxWidth
-import androidx.compose.foundation.layout.height
-import androidx.compose.foundation.layout.padding
-import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.ExperimentalFoundationApi
+import androidx.compose.foundation.background
+import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Add
-import androidx.compose.material.icons.filled.Check
 import androidx.compose.material.icons.filled.CheckCircle
 import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.Pending
@@ -26,22 +18,16 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
-import androidx.compose.ui.window.Dialog
+import com.example.seniorassist.data.Reminder // Import the correct data model
 import com.example.seniorassist.ui.theme.SeniorAssistTheme
-import java.text.SimpleDateFormat
-import java.util.Date
-import java.util.Locale
+import java.time.Instant
+import java.time.LocalDate
+import java.time.ZoneId
+import java.time.LocalDateTime
+import java.time.format.DateTimeFormatter
+import java.util.*
 
-// --- Data Models for Reminders (simplified for UI) ---
-data class Reminder(
-    val id: String,
-    val title: String,
-    val dueAt: Long,
-    val status: String
-)
-
-// --- UI ---
-
+@OptIn(ExperimentalFoundationApi::class)
 @Composable
 fun RemindersScreen(
     reminders: List<Reminder>,
@@ -50,6 +36,11 @@ fun RemindersScreen(
     onDeleteReminder: (String) -> Unit
 ) {
     var showAddDialog by remember { mutableStateOf(false) }
+
+    val groupedReminders = reminders
+        .sortedBy { it.dueAt }
+        .groupBy { it.dueAt.atZone(ZoneId.systemDefault()).toLocalDate() }
+        .toSortedMap()
 
     Scaffold(
         floatingActionButton = {
@@ -64,12 +55,29 @@ fun RemindersScreen(
                 style = MaterialTheme.typography.headlineLarge,
                 modifier = Modifier.padding(16.dp)
             )
-            LazyColumn(
-                contentPadding = PaddingValues(horizontal = 16.dp, vertical = 8.dp),
-                verticalArrangement = Arrangement.spacedBy(12.dp)
-            ) {
-                items(reminders) { reminder ->
-                    ReminderCard(reminder, onUpdateReminder, onDeleteReminder)
+            if (reminders.isEmpty()) {
+                Box(
+                    modifier = Modifier
+                        .weight(1f)
+                        .fillMaxWidth(),
+                    contentAlignment = Alignment.Center
+                ) {
+                    Text("No tienes recordatorios.", style = MaterialTheme.typography.bodyLarge)
+                }
+            } else {
+                LazyColumn(
+                    modifier = Modifier.weight(1f),
+                    contentPadding = PaddingValues(horizontal = 16.dp, vertical = 8.dp),
+                    verticalArrangement = Arrangement.spacedBy(4.dp)
+                ) {
+                    groupedReminders.forEach { (date, remindersForDay) ->
+                        stickyHeader {
+                            DateHeader(date = date)
+                        }
+                        items(remindersForDay, key = { it.id }) { reminder ->
+                            ReminderCard(reminder, onUpdateReminder, onDeleteReminder)
+                        }
+                    }
                 }
             }
         }
@@ -77,8 +85,8 @@ fun RemindersScreen(
         if (showAddDialog) {
             AddReminderDialog(
                 onDismiss = { showAddDialog = false },
-                onSave = { title, dueAt ->
-                    onCreateReminder(title, dueAt)
+                onSave = {
+                    onCreateReminder(it.first, it.second)
                     showAddDialog = false
                 }
             )
@@ -87,41 +95,52 @@ fun RemindersScreen(
 }
 
 @Composable
-fun ReminderCard(
+private fun DateHeader(date: LocalDate) {
+    val headerText = when {
+        date.isEqual(LocalDate.now()) -> "Hoy"
+        date.isEqual(LocalDate.now().plusDays(1)) -> "Mañana"
+        else -> date.format(DateTimeFormatter.ofPattern("EEE, dd MMM", Locale("es")))
+    }
+    Surface(modifier = Modifier.fillMaxWidth()) {
+        Text(
+            text = headerText,
+            style = MaterialTheme.typography.titleMedium,
+            modifier = Modifier.background(MaterialTheme.colorScheme.surfaceVariant).padding(horizontal = 16.dp, vertical = 8.dp)
+        )
+    }
+}
+
+@Composable
+private fun ReminderCard(
     reminder: Reminder,
     onUpdateReminder: (String, String) -> Unit,
     onDeleteReminder: (String) -> Unit
 ) {
-    val dateFormat = remember { SimpleDateFormat("dd MMM, h:mm a", Locale.getDefault()) }
-    val statusColor = when (reminder.status) {
-        "confirmed" -> MaterialTheme.colorScheme.primary
-        "draft" -> MaterialTheme.colorScheme.tertiary
-        "done" -> Color.Gray
-        else -> Color.Gray
-    }
+    val isDone = reminder.status == "done"
 
     Card(
-        modifier = Modifier.fillMaxWidth(),
-        elevation = CardDefaults.cardElevation(defaultElevation = 2.dp)
+        modifier = Modifier.fillMaxWidth().padding(vertical = 4.dp),
+        elevation = CardDefaults.cardElevation(defaultElevation = if (isDone) 0.dp else 2.dp),
     ) {
         Row(
             modifier = Modifier.padding(16.dp),
             verticalAlignment = Alignment.CenterVertically
         ) {
             Icon(
-                imageVector = if (reminder.status == "done") Icons.Default.CheckCircle else Icons.Default.Pending,
+                imageVector = if (isDone) Icons.Filled.CheckCircle else Icons.Filled.Pending,
                 contentDescription = "Estado",
-                tint = statusColor
+                tint = if (isDone) Color.Gray else MaterialTheme.colorScheme.primary
             )
             Spacer(modifier = Modifier.width(16.dp))
             Column(modifier = Modifier.weight(1f)) {
                 Text(text = reminder.title, style = MaterialTheme.typography.bodyLarge, fontWeight = FontWeight.Bold)
-                Text(text = dateFormat.format(Date(reminder.dueAt)), style = MaterialTheme.typography.bodyMedium)
-                Text(text = "Estado: ${reminder.status}", style = MaterialTheme.typography.bodySmall, color = statusColor)
+                val localDateTime = LocalDateTime.ofInstant(reminder.dueAt, ZoneId.systemDefault())
+                val displayTime = localDateTime.format(DateTimeFormatter.ofPattern("h:mm a", Locale.getDefault()))
+                Text(text = displayTime, style = MaterialTheme.typography.bodyMedium)
             }
-            if (reminder.status != "done") {
+            if (!isDone) {
                 IconButton(onClick = { onUpdateReminder(reminder.id, "done") }) {
-                    Icon(Icons.Default.Check, contentDescription = "Marcar como completado")
+                    Icon(Icons.Default.CheckCircle, contentDescription = "Marcar como completado")
                 }
             }
             IconButton(onClick = { onDeleteReminder(reminder.id) }) {
@@ -131,39 +150,114 @@ fun ReminderCard(
     }
 }
 
+@OptIn(ExperimentalMaterial3Api::class)
 @Composable
-fun AddReminderDialog(onDismiss: () -> Unit, onSave: (String, String) -> Unit) {
+private fun AddReminderDialog(onDismiss: () -> Unit, onSave: (Pair<String, String>) -> Unit) {
     var title by remember { mutableStateOf("") }
-    var dueAt by remember { mutableState of("") }
+    var showDatePicker by remember { mutableStateOf(false) }
 
-    Dialog(onDismissRequest = onDismiss) {
-        Card {
-            Column(modifier = Modifier.padding(16.dp)) {
-                Text(text = "Nuevo Recordatorio", style = MaterialTheme.typography.headlineSmall)
-                Spacer(modifier = Modifier.height(16.dp))
+    var hourExpanded by remember { mutableStateOf(false) }
+    var minuteExpanded by remember { mutableStateOf(false) }
+
+    val calendar = Calendar.getInstance()
+    var selectedHour by remember { mutableStateOf(calendar.get(Calendar.HOUR_OF_DAY)) }
+    var selectedMinute by remember { mutableStateOf(0) } 
+
+    val datePickerState = rememberDatePickerState(initialSelectedDateMillis = calendar.timeInMillis)
+
+    val selectedDateText = datePickerState.selectedDateMillis?.let {
+        val instant = Instant.ofEpochMilli(it)
+        val localDate = LocalDateTime.ofInstant(instant, ZoneId.systemDefault()).toLocalDate()
+        localDate.format(DateTimeFormatter.ofPattern("dd/MM/yyyy", Locale.getDefault()))
+    } ?: "Elegir fecha"
+
+    val hours = (0..23).toList()
+    val minutes = (0..55).step(5).toList()
+
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = { Text("Nuevo Recordatorio") },
+        text = {
+            Column(verticalArrangement = Arrangement.spacedBy(16.dp)) {
                 OutlinedTextField(
                     value = title,
                     onValueChange = { title = it },
-                    label = { Text("Título") }
+                    label = { Text("Título") },
+                    modifier = Modifier.fillMaxWidth()
                 )
-                Spacer(modifier = Modifier.height(8.dp))
-                OutlinedTextField(
-                    value = dueAt,
-                    onValueChange = { dueAt = it },
-                    label = { Text("Fecha y Hora (YYYY-MM-DD HH:MM)") },
-                    placeholder = { Text("Ej: 2024-12-25 14:30") }
-                )
-                Spacer(modifier = Modifier.height(16.dp))
-                Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.End) {
-                    TextButton(onClick = onDismiss) {
-                        Text("Cancelar")
+                
+                Button(onClick = { showDatePicker = true }, modifier = Modifier.fillMaxWidth()) {
+                    Text(selectedDateText)
+                }
+
+                Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.CenterVertically) {
+                    ExposedDropdownMenuBox(expanded = hourExpanded, onExpandedChange = { hourExpanded = !hourExpanded }, modifier = Modifier.weight(1f)) {
+                        TextField(
+                            value = String.format("%02d", selectedHour),
+                            onValueChange = {},
+                            readOnly = true,
+                            label = { Text("Hora") },
+                            trailingIcon = { ExposedDropdownMenuDefaults.TrailingIcon(expanded = hourExpanded) },
+                            modifier = Modifier.menuAnchor()
+                        )
+                        ExposedDropdownMenu(expanded = hourExpanded, onDismissRequest = { hourExpanded = false }) {
+                            hours.forEach { hour ->
+                                DropdownMenuItem(
+                                    text = { Text(String.format("%02d", hour)) },
+                                    onClick = {
+                                        selectedHour = hour
+                                        hourExpanded = false
+                                    }
+                                )
+                            }
+                        }
                     }
-                    Spacer(modifier = Modifier.width(8.dp))
-                    Button(onClick = { onSave(title, dueAt) }) {
-                        Text("Guardar")
+                    ExposedDropdownMenuBox(expanded = minuteExpanded, onExpandedChange = { minuteExpanded = !minuteExpanded }, modifier = Modifier.weight(1f)) {
+                        TextField(
+                            value = String.format("%02d", selectedMinute),
+                            onValueChange = {},
+                            readOnly = true,
+                            label = { Text("Minutos") },
+                            trailingIcon = { ExposedDropdownMenuDefaults.TrailingIcon(expanded = minuteExpanded) },
+                            modifier = Modifier.menuAnchor()
+                        )
+                        ExposedDropdownMenu(expanded = minuteExpanded, onDismissRequest = { minuteExpanded = false }) {
+                            minutes.forEach { minute ->
+                                DropdownMenuItem(
+                                    text = { Text(String.format("%02d", minute)) },
+                                    onClick = {
+                                        selectedMinute = minute
+                                        minuteExpanded = false
+                                    }
+                                )
+                            }
+                        }
                     }
                 }
             }
+        },
+        confirmButton = {
+            Button(onClick = {
+                val selectedDateMillis = datePickerState.selectedDateMillis ?: System.currentTimeMillis()
+                val selectedLocalDate = Instant.ofEpochMilli(selectedDateMillis).atZone(ZoneId.systemDefault()).toLocalDate()
+                val selectedLocalDateTime = selectedLocalDate.atTime(selectedHour, selectedMinute)
+                val formattedString = selectedLocalDateTime.atZone(ZoneId.systemDefault()).toInstant().toString()
+                onSave(Pair(title, formattedString))
+            }) { Text("Guardar") }
+        },
+        dismissButton = {
+            TextButton(onClick = onDismiss) { Text("Cancelar") }
+        }
+    )
+
+    if (showDatePicker) {
+        DatePickerDialog(
+            onDismissRequest = { showDatePicker = false },
+            confirmButton = {
+                TextButton(onClick = { showDatePicker = false }) { Text("OK") }
+            }
+        ) {
+            DatePicker(state = datePickerState)
         }
     }
 }
@@ -173,13 +267,14 @@ fun AddReminderDialog(onDismiss: () -> Unit, onSave: (String, String) -> Unit) {
 fun RemindersScreenPreview() {
     SeniorAssistTheme {
         val previewReminders = listOf(
-            Reminder("1", "Tomar pastilla de la presión", System.currentTimeMillis() + 3600000, "confirmed"),
+            Reminder("1", "Tomar pastilla de la presión", Instant.now(), "draft"),
+            Reminder("2", "Paseo matutino", Instant.now().plusSeconds(86400), "draft"),
         )
         RemindersScreen(
-            reminders = previewReminders, 
-            onCreateReminder = {_,_ -> }, 
-            onUpdateReminder = {_,_ -> },
-            onDeleteReminder = {}
+            reminders = previewReminders,
+            onCreateReminder = { _, _ -> },
+            onUpdateReminder = { _, _ -> },
+            onDeleteReminder = { _ -> }
         )
     }
 }

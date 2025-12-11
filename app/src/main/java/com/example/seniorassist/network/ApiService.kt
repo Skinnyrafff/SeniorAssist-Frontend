@@ -1,0 +1,1 @@
+// Este fichero ha sido consolidado en data/ApiService.kt y puede ser eliminado.

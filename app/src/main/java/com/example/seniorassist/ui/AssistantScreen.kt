@@ -64,8 +64,8 @@ fun AssistantContentUI(uiState: VoiceUiState) {
 
         AutoResizeText(
             text = uiState.displayText,
-            style = MaterialTheme.typography.headlineMedium,
-            modifier = Modifier.height(100.dp)
+            style = MaterialTheme.typography.displayMedium,
+            modifier = Modifier.height(200.dp)
         )
 
         Spacer(modifier = Modifier.height(32.dp))
@@ -113,7 +113,7 @@ fun AutoResizeText(
         textAlign = TextAlign.Center,
         onTextLayout = { textLayoutResult ->
             if (textLayoutResult.didOverflowHeight) {
-                scaledTextStyle = scaledTextStyle.copy(fontSize = scaledTextStyle.fontSize * 0.9f)
+                scaledTextStyle = scaledTextStyle.copy(fontSize = scaledTextStyle.fontSize * 0.95f) // Reduced the shrinking factor slightly
             } else {
                 readyToDraw = true
             }
